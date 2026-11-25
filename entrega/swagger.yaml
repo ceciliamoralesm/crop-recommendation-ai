@@ -1,0 +1,881 @@
+openapi: 3.1.0
+info:
+  title: Crop Recommendation AI
+  description: 'Servicio de IA que recomienda el cultivo más adecuado según las condiciones
+    del suelo (N, P, K, pH) y del clima (temperatura, humedad, lluvia).
+
+
+    Modelo: RandomForest multiclase (22 cultivos), entrenado siguiendo CRISP-ML(Q).'
+  version: 1.0.0
+paths:
+  /api/predict:
+    post:
+      tags:
+      - Predicciones
+      summary: Recomendar un cultivo
+      description: 'Envía las condiciones del suelo y el clima al modelo activo y
+        devuelve el cultivo recomendado,
+
+        su confianza y el top 3. La predicción se guarda en el historial.'
+      operationId: predict_api_predict_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictResponse'
+        '503':
+          description: No hay modelo activo
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/predictions:
+    get:
+      tags:
+      - Predicciones
+      summary: Historial de predicciones
+      description: Devuelve las predicciones previas (datos enviados y resultado),
+        de la más reciente a la más antigua.
+      operationId: list_predictions_api_predictions_get
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 10
+          title: Size
+      - name: label
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filtrar por cultivo predicho
+          title: Label
+        description: Filtrar por cultivo predicho
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/predictions/{prediction_id}:
+    get:
+      tags:
+      - Predicciones
+      summary: Detalle de una predicción
+      operationId: get_prediction_api_predictions__prediction_id__get
+      parameters:
+      - name: prediction_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Prediction Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionItem'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/metrics:
+    get:
+      tags:
+      - Modelo
+      summary: Métricas del modelo activo
+      description: 'Accuracy, precision, recall y F1 (macro), F1 de validación cruzada,
+        matriz de confusión,
+
+        métricas por clase e importancia de variables.'
+      operationId: metrics_api_metrics_get
+      parameters:
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          description: Versión concreta; si se omite, la activa
+          title: Version
+        description: Versión concreta; si se omite, la activa
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMetrics'
+        '404':
+          description: No hay modelo activo
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/retrain:
+    post:
+      tags:
+      - Modelo
+      summary: Re-entrenar el modelo
+      description: 'Entrena una nueva versión con todos los datasets activos de la
+        base de datos. El nuevo modelo
+
+        se activa si su F1 macro no empeora más que la tolerancia configurada (o si
+        `force=true`).'
+      operationId: retrain_api_retrain_post
+      parameters:
+      - name: force
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Activar el nuevo modelo aunque tenga peor F1
+          default: false
+          title: Force
+        description: Activar el nuevo modelo aunque tenga peor F1
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetrainResponse'
+        '409':
+          description: Re-entrenamiento en curso
+        '422':
+          description: Datos insuficientes
+  /api/models:
+    get:
+      tags:
+      - Modelo
+      summary: Versiones del modelo
+      operationId: list_models_api_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ModelSummary'
+                type: array
+                title: Response List Models Api Models Get
+  /api/models/{version}/activate:
+    post:
+      tags:
+      - Modelo
+      summary: Activar una versión (rollback)
+      operationId: activate_api_models__version__activate_post
+      parameters:
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSummary'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/datasets/upload:
+    post:
+      tags:
+      - Datos de entrenamiento
+      summary: Subir archivo de entrenamiento (CSV)
+      description: 'Valida el archivo (columnas, tipos, rangos y duplicados), lo guarda
+        en la base de datos y,
+
+        opcionalmente, re-entrena el modelo.'
+      operationId: upload_api_datasets_upload_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_api_datasets_upload_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '413':
+          description: Archivo demasiado grande
+        '422':
+          description: CSV inválido
+  /api/datasets:
+    get:
+      tags:
+      - Datos de entrenamiento
+      summary: Datasets cargados y distribución de clases
+      operationId: summary_api_datasets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetSummary'
+  /api/datasets/{dataset_id}:
+    patch:
+      tags:
+      - Datos de entrenamiento
+      summary: Activar/desactivar un dataset
+      operationId: toggle_api_datasets__dataset_id__patch
+      parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Dataset Id
+      - name: is_active
+        in: query
+        required: true
+        schema:
+          type: boolean
+          title: Is Active
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetInfo'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/datasets/template:
+    get:
+      tags:
+      - Datos de entrenamiento
+      summary: Descargar plantilla CSV
+      operationId: template_api_datasets_template_get
+      responses:
+        '200':
+          description: Successful Response
+  /api/health:
+    get:
+      tags:
+      - Sistema
+      summary: Estado del servicio
+      operationId: health_api_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+components:
+  schemas:
+    Body_upload_api_datasets_upload_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+          description: CSV con columnas N,P,K,temperature,humidity,ph,rainfall,label
+        mode:
+          type: string
+          enum:
+          - append
+          - replace
+          title: Mode
+          description: 'append: se suma a los datos actuales; replace: sustituye a
+            los datos activos'
+          default: append
+        retrain:
+          type: boolean
+          title: Retrain
+          description: Re-entrenar automáticamente tras la carga
+          default: false
+      type: object
+      required:
+      - file
+      title: Body_upload_api_datasets_upload_post
+    ClassMetric:
+      properties:
+        precision:
+          type: number
+          title: Precision
+        recall:
+          type: number
+          title: Recall
+        f1:
+          type: number
+          title: F1
+        support:
+          type: integer
+          title: Support
+      type: object
+      required:
+      - precision
+      - recall
+      - f1
+      - support
+      title: ClassMetric
+    DatasetInfo:
+      properties:
+        id:
+          type: integer
+          title: Id
+        filename:
+          type: string
+          title: Filename
+        uploaded_at:
+          type: string
+          format: date-time
+          title: Uploaded At
+        n_rows:
+          type: integer
+          title: N Rows
+        is_active:
+          type: boolean
+          title: Is Active
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - filename
+      - uploaded_at
+      - n_rows
+      - is_active
+      - notes
+      title: DatasetInfo
+    DatasetSummary:
+      properties:
+        datasets:
+          items:
+            $ref: '#/components/schemas/DatasetInfo'
+          type: array
+          title: Datasets
+        total_active_samples:
+          type: integer
+          title: Total Active Samples
+        class_distribution:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Class Distribution
+      type: object
+      required:
+      - datasets
+      - total_active_samples
+      - class_distribution
+      title: DatasetSummary
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    Health:
+      properties:
+        status:
+          type: string
+          title: Status
+        database:
+          type: boolean
+          title: Database
+        model_loaded:
+          type: boolean
+          title: Model Loaded
+        active_model_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Active Model Version
+      type: object
+      required:
+      - status
+      - database
+      - model_loaded
+      - active_model_version
+      title: Health
+    LabelProb:
+      properties:
+        label:
+          type: string
+          title: Label
+        probability:
+          type: number
+          title: Probability
+      type: object
+      required:
+      - label
+      - probability
+      title: LabelProb
+    ModelMetrics:
+      properties:
+        id:
+          type: integer
+          title: Id
+        version:
+          type: integer
+          title: Version
+        algorithm:
+          type: string
+          title: Algorithm
+        trained_at:
+          type: string
+          format: date-time
+          title: Trained At
+        is_active:
+          type: boolean
+          title: Is Active
+        n_train:
+          type: integer
+          title: N Train
+        n_test:
+          type: integer
+          title: N Test
+        accuracy:
+          type: number
+          title: Accuracy
+        precision_macro:
+          type: number
+          title: Precision Macro
+        recall_macro:
+          type: number
+          title: Recall Macro
+        f1_macro:
+          type: number
+          title: F1 Macro
+        cv_f1_mean:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cv F1 Mean
+        cv_f1_std:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cv F1 Std
+        classes:
+          items:
+            type: string
+          type: array
+          title: Classes
+        confusion_matrix:
+          items:
+            items:
+              type: integer
+            type: array
+          type: array
+          title: Confusion Matrix
+        per_class:
+          additionalProperties:
+            $ref: '#/components/schemas/ClassMetric'
+          type: object
+          title: Per Class
+        hyperparams:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Hyperparams
+      type: object
+      required:
+      - id
+      - version
+      - algorithm
+      - trained_at
+      - is_active
+      - n_train
+      - n_test
+      - accuracy
+      - precision_macro
+      - recall_macro
+      - f1_macro
+      - cv_f1_mean
+      - cv_f1_std
+      - classes
+      - confusion_matrix
+      - per_class
+      - hyperparams
+      title: ModelMetrics
+    ModelSummary:
+      properties:
+        id:
+          type: integer
+          title: Id
+        version:
+          type: integer
+          title: Version
+        algorithm:
+          type: string
+          title: Algorithm
+        trained_at:
+          type: string
+          format: date-time
+          title: Trained At
+        is_active:
+          type: boolean
+          title: Is Active
+        n_train:
+          type: integer
+          title: N Train
+        accuracy:
+          type: number
+          title: Accuracy
+        f1_macro:
+          type: number
+          title: F1 Macro
+      type: object
+      required:
+      - id
+      - version
+      - algorithm
+      - trained_at
+      - is_active
+      - n_train
+      - accuracy
+      - f1_macro
+      title: ModelSummary
+    PredictRequest:
+      properties:
+        N:
+          type: number
+          maximum: 300.0
+          minimum: 0.0
+          title: N
+          description: Nitrógeno en el suelo (kg/ha)
+        P:
+          type: number
+          maximum: 300.0
+          minimum: 0.0
+          title: P
+          description: Fósforo en el suelo (kg/ha)
+        K:
+          type: number
+          maximum: 300.0
+          minimum: 0.0
+          title: K
+          description: Potasio en el suelo (kg/ha)
+        temperature:
+          type: number
+          maximum: 60.0
+          minimum: -10.0
+          title: Temperature
+          description: Temperatura media (°C)
+        humidity:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Humidity
+          description: Humedad relativa (%)
+        ph:
+          type: number
+          maximum: 14.0
+          minimum: 0.0
+          title: Ph
+          description: pH del suelo
+        rainfall:
+          type: number
+          maximum: 1000.0
+          minimum: 0.0
+          title: Rainfall
+          description: Precipitación (mm)
+      type: object
+      required:
+      - N
+      - P
+      - K
+      - temperature
+      - humidity
+      - ph
+      - rainfall
+      title: PredictRequest
+      description: Condiciones de suelo y clima de la parcela.
+      example:
+        K: 43
+        N: 90
+        P: 42
+        humidity: 82.0
+        ph: 6.5
+        rainfall: 202.9
+        temperature: 20.88
+    PredictResponse:
+      properties:
+        id:
+          type: integer
+          title: Id
+          description: ID de la predicción guardada en el historial
+        label:
+          type: string
+          title: Label
+          description: Cultivo recomendado
+        confidence:
+          type: number
+          title: Confidence
+          description: Probabilidad de la clase predicha (0-1)
+        top3:
+          items:
+            $ref: '#/components/schemas/LabelProb'
+          type: array
+          title: Top3
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+          description: Avisos si la entrada está fuera del rango de entrenamiento
+        model_version:
+          type: integer
+          title: Model Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - label
+      - confidence
+      - top3
+      - warnings
+      - model_version
+      - created_at
+      title: PredictResponse
+    PredictionItem:
+      properties:
+        id:
+          type: integer
+          title: Id
+        input:
+          $ref: '#/components/schemas/PredictRequest'
+        predicted_label:
+          type: string
+          title: Predicted Label
+        confidence:
+          type: number
+          title: Confidence
+        top3:
+          items:
+            $ref: '#/components/schemas/LabelProb'
+          type: array
+          title: Top3
+        model_version:
+          type: integer
+          title: Model Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - input
+      - predicted_label
+      - confidence
+      - top3
+      - model_version
+      - created_at
+      title: PredictionItem
+    PredictionPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PredictionItem'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - size
+      title: PredictionPage
+    RetrainResponse:
+      properties:
+        new_version:
+          type: integer
+          title: New Version
+        activated:
+          type: boolean
+          title: Activated
+        reason:
+          type: string
+          title: Reason
+        previous_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Previous Version
+        previous_f1_macro:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Previous F1 Macro
+        metrics:
+          $ref: '#/components/schemas/ModelMetrics'
+      type: object
+      required:
+      - new_version
+      - activated
+      - reason
+      - previous_version
+      - previous_f1_macro
+      - metrics
+      title: RetrainResponse
+    UploadResponse:
+      properties:
+        dataset:
+          $ref: '#/components/schemas/DatasetInfo'
+        mode:
+          type: string
+          enum:
+          - append
+          - replace
+          title: Mode
+        validation:
+          $ref: '#/components/schemas/ValidationReport'
+        total_active_samples:
+          type: integer
+          title: Total Active Samples
+        retrain:
+          anyOf:
+          - $ref: '#/components/schemas/RetrainResponse'
+          - type: 'null'
+      type: object
+      required:
+      - dataset
+      - mode
+      - validation
+      - total_active_samples
+      title: UploadResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationReport:
+      properties:
+        total_rows:
+          type: integer
+          title: Total Rows
+        valid_rows:
+          type: integer
+          title: Valid Rows
+        rejected_null_or_non_numeric:
+          type: integer
+          title: Rejected Null Or Non Numeric
+        rejected_out_of_range:
+          type: integer
+          title: Rejected Out Of Range
+        duplicates_removed:
+          type: integer
+          title: Duplicates Removed
+        classes:
+          type: integer
+          title: Classes
+      type: object
+      required:
+      - total_rows
+      - valid_rows
+      - rejected_null_or_non_numeric
+      - rejected_out_of_range
+      - duplicates_removed
+      - classes
+      title: ValidationReport
+tags:
+- name: Predicciones
+  description: Predecir y consultar el historial
+- name: Modelo
+  description: Métricas, re-entrenamiento y versiones
+- name: Datos de entrenamiento
+  description: Carga y gestión de datasets
+- name: Sistema
+  description: Estado del servicio
+servers:
+- url: http://127.0.0.1:8001
+  description: Local
