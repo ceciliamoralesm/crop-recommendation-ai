@@ -16,29 +16,33 @@
   --bad: #d03b3b;
   --bad-bg: #fbe8e8;
   --radius: 10px;
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--ink);
   background: var(--page);
+  transition: background-color .2s ease, color .2s ease;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --ink: #f0efec;
-    --ink-2: #c3c2b7;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --series: #3987e5;
-    --series-hover: #5598e7;
-    --accent: #86b6ef;
-    --good: #0ca30c;
-    --good-bg: #13261a;
-    --warn-bg: #2b2310;
-    --warn: #fab219;
-    --bad-bg: #2e1616;
-  }
+/* Tema oscuro: se activa con <html data-theme="dark"> (botón de la cabecera) */
+:root[data-theme="dark"] {
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --series: #3987e5;
+  --series-hover: #5598e7;
+  --accent: #86b6ef;
+  --good: #0ca30c;
+  --good-bg: #13261a;
+  --warn-bg: #2b2310;
+  --warn: #fab219;
+  --bad-bg: #2e1616;
+  color-scheme: dark;
 }
+.status-row { display: flex; align-items: center; gap: .75rem; }
+.theme-toggle { font: inherit; font-size: .85rem; padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink); cursor: pointer; }
+.theme-toggle:hover { border-color: var(--series); }
 * { box-sizing: border-box; }
 body { margin: 0; }
 h1, h2, h3 { margin: 0 0 .4rem; }
