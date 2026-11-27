@@ -21,7 +21,11 @@ export default function App() {
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme ?? 'light')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem('theme', theme)
+    try {
+      localStorage.setItem('theme', theme)
+    } catch {
+      // Almacenamiento bloqueado o lleno: el tema elegido se mantiene en memoria
+    }
   }, [theme])
   const [health, setHealth] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)

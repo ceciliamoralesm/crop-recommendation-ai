@@ -7,9 +7,11 @@
     <title>Recomendador de Cultivos IA</title>
     <script>
       // Tema guardado o, si no hay, el del sistema (se aplica antes de pintar para evitar parpadeo)
+      // Si el navegador bloquea localStorage, se usa la preferencia del sistema
+      var saved = null
+      try { saved = localStorage.getItem('theme') } catch (e) { saved = null }
       document.documentElement.dataset.theme =
-        localStorage.getItem('theme') ||
-        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     </script>
   </head>
   <body>
