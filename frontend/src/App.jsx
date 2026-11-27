@@ -18,6 +18,11 @@ export default function App() {
     return TABS.some((t) => t.id === h) ? h : 'predict'
   })
   const setTab = (id) => { setTabState(id); window.history.replaceState(null, '', `#${id}`) }
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme ?? 'light')
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('theme', theme)
+  }, [theme])
   const [health, setHealth] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
@@ -40,7 +45,16 @@ export default function App() {
         </div>
         <div className="status">
           <span className={`badge ${statusClass}`}>● {statusText}</span>
-          <a className="muted small" href={API_URL.replace(/\/api$/, '/docs')} target="_blank" rel="noreferrer">Swagger ↗</a>
+          <div className="status-row">
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            >
+              {theme === 'dark' ? '☀️ Modo claro' : '🌙 Modo oscuro'}
+            </button>
+            <a className="muted small" href={API_URL.replace(/\/api$/, '/docs')} target="_blank" rel="noreferrer">Swagger ↗</a>
+          </div>
         </div>
       </header>
       <nav className="tabs" role="tablist">
